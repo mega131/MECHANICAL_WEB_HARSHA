@@ -1,6 +1,10 @@
-// On Vercel, the frontend and API share the same domain — use relative /api paths.
-// When running locally against a separate backend, set VITE_API_URL=http://localhost:5000
-const API_BASE = import.meta.env.VITE_API_URL || '';
+// In Vercel Services, the frontend and backend share one public domain.
+// All /api/* calls go through Vercel's rewrite to the backend service.
+// Use relative paths so they work from any domain (Vercel, local, preview).
+// VITE_API_URL is only used for local dev against a separate backend server.
+const API_BASE = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL  // local dev: http://localhost:5000
+  : '';                            // Vercel: use relative /api/... paths
 
 export async function checkBackendHealth() {
   try {
@@ -26,13 +30,11 @@ export async function fetchLatestReading() {
 }
 
 export async function uploadCsvFile(file) {
-  // Send the raw CSV text so it works with both the Express backend (multipart)
-  // and the Vercel serverless function (raw text/csv body).
-  const csvText = await file.text();
+  const formData = new FormData();
+  formData.append('file', file);
   const res = await fetch(`${API_BASE}/api/upload-csv`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/csv' },
-    body: csvText
+    body: formData
   });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));

@@ -1,12 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { io } from 'socket.io-client';
 import { parseMotorVibrationCsvClient } from '../services/csvParser';
 import * as api from '../services/api';
-
-// Socket.IO is not available on Vercel serverless.
-// We use a lightweight polling shim that calls REST endpoints periodically.
-// When a real Socket.IO backend is available (local dev / Railway), it still works
-// because the REST endpoints exist on both environments.
-const USE_SOCKETIO = false; // Set to true only when running against a full Node.js backend
 
 const DataContext = createContext(null);
 
@@ -56,7 +51,6 @@ export function DataProvider({ children }) {
   const socketRef = useRef(null);
   const staleTimerRef = useRef(null);
   const simIntervalRef = useRef(null);
-  const pollIntervalRef = useRef(null);
 
   // Determine active dataset based on mode
   const activeReadings = mode === 'csv' 
@@ -101,63 +95,76 @@ export function DataProvider({ children }) {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Backend connectivity: REST polling (replaces Socket.IO for Vercel deploy)
-  // Polls /api/health every 5 seconds to track backend status.
-  // When in 'live' mode, also polls /api/readings/latest for new IoT readings.
+  // Real-time: Socket.IO connection to the Express backend.
+  // On Vercel Services, the backend runs as a persistent Node.js server so
+  // WebSocket / Socket.IO is fully supported.
+  // Falls back gracefully to REST polling if the backend is unreachable.
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    let cancelled = false;
+    // VITE_API_URL is injected by Vercel's service binding at build time.
+    // In local dev it defaults to http://localhost:5000.
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-    async function pollHealth() {
-      try {
-        const data = await api.checkBackendHealth();
-        if (!cancelled) {
-          setBackendStatus(data.status === 'ok' ? 'connected' : 'offline');
-        }
-      } catch {
-        if (!cancelled) setBackendStatus('offline');
-      }
-    }
+    const socket = io(backendUrl, {
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      timeout: 5000
+    });
+    socketRef.current = socket;
 
-    async function pollLiveReadings() {
-      if (mode !== 'live') return;
-      try {
-        const latest = await api.fetchLatestReading();
-        if (!cancelled && latest && latest.id) {
-          setLiveReadings(prev => {
-            const lastId = prev.length ? prev[prev.length - 1].id : null;
-            if (latest.id !== lastId) {
-              resetStaleTimer();
-              setLastDataTimestamp(latest.rawTimestamp || new Date().toLocaleTimeString());
-              setDevices(prevDevs => prevDevs.map(dev =>
-                dev.deviceId === latest.deviceId
-                  ? { ...dev, status: 'online', lastSeen: new Date().toISOString(), totalPackets: (dev.totalPackets || 0) + 1 }
-                  : dev
-              ));
-              return [...prev.slice(-499), latest];
-            }
-            return prev;
-          });
-        }
-      } catch { /* backend offline — silent */ }
-    }
+    socket.on('connect', () => {
+      setBackendStatus('connected');
+    });
 
-    // Initial health check
-    pollHealth();
+    socket.on('disconnect', () => {
+      setBackendStatus('offline');
+    });
 
-    // Poll health every 5 s, live readings every 2 s
-    const healthTimer = setInterval(pollHealth, 5000);
-    const liveTimer = setInterval(pollLiveReadings, 2000);
+    socket.on('connect_error', () => {
+      setBackendStatus('offline');
+    });
 
-    pollIntervalRef.current = { healthTimer, liveTimer };
+    socket.on('initial:state', (state) => {
+      if (state.thresholds) setThresholds(state.thresholds);
+      if (state.devices) setDevices(state.devices);
+    });
+
+    socket.on('sensor:reading', (reading) => {
+      resetStaleTimer();
+      setLastDataTimestamp(reading.rawTimestamp || new Date().toLocaleTimeString());
+      
+      // Update live buffer (keep latest 500 readings in memory)
+      setLiveReadings((prev) => [...prev.slice(-499), reading]);
+
+      // If reading is from hardware, mark device online
+      setDevices((prev) => prev.map(dev => 
+        dev.deviceId === reading.deviceId 
+          ? { ...dev, status: 'online', lastSeen: new Date().toISOString(), totalPackets: (dev.totalPackets || 0) + 1 }
+          : dev
+      ));
+    });
+
+    socket.on('alert:triggered', (alert) => {
+      setAlerts((prev) => [alert, ...prev.slice(0, 49)]);
+    });
+
+    socket.on('device:status', (deviceList) => {
+      setDevices(deviceList);
+    });
+
+    socket.on('data:reloaded', () => {
+      loadBackendReadings();
+    });
+
+    socket.on('thresholds:updated', (newThresholds) => {
+      setThresholds(newThresholds);
+    });
 
     return () => {
-      cancelled = true;
-      clearInterval(healthTimer);
-      clearInterval(liveTimer);
+      socket.disconnect();
       if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
     };
-  }, [mode, resetStaleTimer]);
+  }, [resetStaleTimer]);
 
   // Load readings from backend or local CSV on mount
   const loadBackendReadings = useCallback(async () => {
