@@ -1,0 +1,18 @@
+{
+  "name": "smart-motor-vibration-monitoring",
+  "version": "1.0.0",
+  "description": "Smart Motor Vibration Monitoring Dashboard with Real-Time IoT Integration",
+  "scripts": {
+    "start": "node backend/server.js",
+    "backend": "npm run dev --prefix backend",
+    "frontend": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "test": "npm test --prefix backend",
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan,emerald\" \"npm run start --prefix backend\" \"npm run dev --prefix frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "author": "Antigravity Engineering",
+  "license": "ISC"
+}

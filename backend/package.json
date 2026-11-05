@@ -1,0 +1,23 @@
+{
+  "name": "motor-vibration-backend",
+  "version": "1.0.0",
+  "description": "Smart Motor Vibration Monitoring Dashboard IoT & CSV Backend",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": ["iot", "motor", "vibration", "esp32", "dashboard"],
+  "author": "Antigravity Engineering",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "papaparse": "^5.5.2",
+    "socket.io": "^4.8.1"
+  }
+}
