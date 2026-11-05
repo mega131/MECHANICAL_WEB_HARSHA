@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "npm install",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    { "source": "/api/readings/latest", "destination": "/api/readings/latest" },
+    { "source": "/api/alerts/thresholds", "destination": "/api/alerts/thresholds" },
+    { "source": "/api/alerts/acknowledge/:id", "destination": "/api/alerts/acknowledge/[id]" },
+    { "source": "/api/health",           "destination": "/api/health" },
+    { "source": "/api/readings",         "destination": "/api/readings" },
+    { "source": "/api/alerts",           "destination": "/api/alerts" },
+    { "source": "/api/devices",          "destination": "/api/devices" },
+    { "source": "/api/config",           "destination": "/api/config" },
+    { "source": "/api/mode",             "destination": "/api/mode" },
+    { "source": "/api/upload-csv",       "destination": "/api/upload-csv" },
+    { "source": "/api/reset-default-csv","destination": "/api/reset-default-csv" },
+    { "source": "/(.*)",                 "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+      ]
+    }
+  ]
+}
+
